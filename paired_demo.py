@@ -46,6 +46,7 @@ N_BUCKETS  = len(BUCKETS)
 ADV_EXPLORE   = 5 * N_BUCKETS
 ADV_EPSILON   = 0.15        # 15% explore — get fresh regret for b4/b6
 ADV_EMA       = 0.25        # new sample weight; recent regret dominates
+DR_MIX        = 0.15        # 15% random bucket — helps generalization to held-out mazes
 
 
 # ── GridWorld ─────────────────────────────────────────────────────────────────
@@ -82,17 +83,18 @@ def is_solvable(walls) -> bool:
     return False
 
 
-def step(state, action, walls):
+def step(pos, action, walls):
+    """pos=(r,c). Returns next position."""
     dr, dc = ((-1,0),(1,0),(0,-1),(0,1))[action]
-    nr, nc = state[0]+dr, state[1]+dc
+    nr, nc = pos[0]+dr, pos[1]+dc
     if 0 <= nr < GRID and 0 <= nc < GRID and (nr, nc) not in walls:
         return (nr, nc)
-    return state
+    return pos
 
 
 def run_episode(Q: dict, walls, epsilon: float) -> float:
     """ε-greedy Q-learning episode. Updates Q in-place. Returns discounted return."""
-    state   = (0, 0)
+    pos     = (0, 0)
     goal    = (GRID - 1, GRID - 1)
     total   = 0.0
     gamma_t = 1.0
@@ -101,37 +103,37 @@ def run_episode(Q: dict, walls, epsilon: float) -> float:
         if random.random() < epsilon:
             action = random.randrange(4)
         else:
-            action = int(np.argmax([Q[(state, a)] for a in range(4)]))
+            action = int(np.argmax([Q[(pos, a)] for a in range(4)]))
 
-        nxt    = step(state, action, walls)
-        reward = 1.0 if nxt == goal else -0.01
+        nxt_pos = step(pos, action, walls)
+        reward = 1.0 if nxt_pos == goal else -0.01
         total += gamma_t * reward
         gamma_t *= GAMMA
 
-        best_next = max(Q[(nxt, a)] for a in range(4))
-        Q[(state, action)] += ALPHA * (reward + GAMMA * best_next - Q[(state, action)])
-        state = nxt
-        if state == goal:
+        best_next = max(Q[(nxt_pos, a)] for a in range(4))
+        Q[(pos, action)] += ALPHA * (reward + GAMMA * best_next - Q[(pos, action)])
+        pos = nxt_pos
+        if pos == goal:
             break
 
     return total
 
 
 def eval_episode(Q: dict, walls) -> float:
-    """Greedy episode (no exploration). Returns discounted return."""
-    state   = (0, 0)
+    """Greedy episode (ε=0). Returns discounted return."""
+    pos     = (0, 0)
     goal    = (GRID - 1, GRID - 1)
     total   = 0.0
     gamma_t = 1.0
 
     for _ in range(MAX_STEPS):
-        action = int(np.argmax([Q[(state, a)] for a in range(4)]))
-        nxt    = step(state, action, walls)
-        reward = 1.0 if nxt == goal else -0.01
+        action = int(np.argmax([Q[(pos, a)] for a in range(4)]))
+        nxt_pos = step(pos, action, walls)
+        reward = 1.0 if nxt_pos == goal else -0.01
         total += gamma_t * reward
         gamma_t *= GAMMA
-        state = nxt
-        if state == goal:
+        pos = nxt_pos
+        if pos == goal:
             break
 
     return total
@@ -216,8 +218,8 @@ def train_paired():
     print()
 
     for it in range(1, ITERATIONS + 1):
-        # 1. Adversary picks difficulty
-        bucket = adversary.choose()
+        # 1. Adversary picks difficulty (DR mix for generalization)
+        bucket = random.randrange(N_BUCKETS) if random.random() < DR_MIX else adversary.choose()
         n_obs  = BUCKETS[bucket]
 
         # 2. Build environment
@@ -284,14 +286,14 @@ def train_minimax():
 
 # ── Evaluation ────────────────────────────────────────────────────────────────
 
-def final_eval(Q: dict, n_trials: int = 100) -> dict:
+def final_eval(Q: dict, n_trials: int = 100, seed_offset: int = 9000) -> dict:
     """Greedy success rate across all difficulty buckets (held-out seeds)."""
     results = {}
     for n_obs in BUCKETS:
         successes = 0
         total_solvable = 0
         for trial in range(n_trials):
-            walls = make_grid(n_obs, seed=9000 + trial)
+            walls = make_grid(n_obs, seed=seed_offset + trial)
             if not is_solvable(walls):
                 continue
             total_solvable += 1
@@ -301,22 +303,28 @@ def final_eval(Q: dict, n_trials: int = 100) -> dict:
     return results
 
 
+def _q_signature(Q):
+    """Diagnostic: verify Q was trained."""
+    return len(Q), round(sum(Q.values()), 4)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     paired_agent, adversary = train_paired()
+    paired_results = final_eval(paired_agent, n_trials=100, seed_offset=9000)
+    n_entries, q_sum = _q_signature(paired_agent)
+    print(f"  [Sanity] PAIRED Q: {n_entries} entries, sum={q_sum}")
 
     print("Training baselines (silent)...")
     dr_agent = train_domain_randomization()
     mm_agent = train_minimax()
     print()
-
-    paired_results = final_eval(paired_agent)
-    dr_results     = final_eval(dr_agent)
-    mm_results     = final_eval(mm_agent)
+    dr_results = final_eval(dr_agent, n_trials=100, seed_offset=9000)
+    mm_results = final_eval(mm_agent, n_trials=100, seed_offset=9000)
 
     print("=" * 62)
-    print("  Final Zero-Shot Success Rates  (100 held-out trials each)")
+    print("  Final Success Rates  (100 held-out trials, seeds 9000–9099)")
     print("=" * 62)
     print(f"  {'Obstacles':<12}  {'PAIRED':^16}  {'Domain Rand':^16}  {'Minimax':^16}")
     print("  " + "─" * 58)

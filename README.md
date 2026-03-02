@@ -17,7 +17,7 @@ python paired_demo.py
 - **Q-learning** protagonist on a 7×7 GridWorld
 - **Bandit adversary** over 3 difficulty buckets (2, 4, 6 obstacles)
 - **Regret** = antagonist_return − protagonist_return
-- Prints **chosen difficulty distribution** + success rates
+- Prints **chosen difficulty distribution**, **success rates** (PAIRED vs DR vs Minimax), and a **sanity check** (Q-table size/sum)
 
 The curriculum shifts visibly over training:
 
@@ -99,12 +99,24 @@ rl-demo/
 
 | Component | Implementation |
 |-----------|----------------|
-| Protagonist | Q-learning |
+| Protagonist | Q-learning (state = position only; generalizes across maze layouts) |
 | Antagonist | Q-learning, pre-trained on easy envs |
 | Adversary | ε-greedy bandit with EMA over mean regret |
 | Environment | 7×7 grid, 3 difficulty buckets [2, 4, 6 obstacles] |
 
-The antagonist is pre-trained so it provides a meaningful regret signal from the start. The adversary uses EMA (α=0.25) so recent regret drives the curriculum shift.
+The antagonist is pre-trained so it provides a meaningful regret signal from the start. The adversary uses EMA (α=0.25) so recent regret drives the curriculum shift. A 15% domain-randomization mix (`DR_MIX`) samples a random difficulty bucket instead of the adversary’s choice to improve generalization to held-out mazes.
+
+After training, a sanity check prints Q-table size and value sum (non-zero confirms the agent was trained).
+
+### Expected Results (minimal demo)
+
+| Method | b2 (2 obs) | b4 (4 obs) | b6 (6 obs) |
+|--------|------------|------------|------------|
+| **PAIRED** | ~50% | ~23% | ~12% |
+| Domain Rand. | ~60% | ~20% | ~10% |
+| Minimax | 0% | 0% | 0% |
+
+Minimax gets 0% because it only trains on the hardest bucket (b6) and never sees easier environments. PAIRED and Domain Randomization both achieve non-zero success; PAIRED additionally shows the curriculum shift in the difficulty distribution.
 
 ---
 
@@ -184,5 +196,6 @@ Zero-shot transfer is evaluated on five hand-designed environments:
 
 - **Non-negative regret**: `REGRET = max(0, REGRET)` — stabilises training
 - **Protagonist/antagonist use environment reward** (not regret) — per paper Appendix E.2
-- **Minimal demo**: EMA on adversary bandit for responsive curriculum shift
+- **Minimal demo**: EMA on adversary bandit for responsive curriculum shift; 15% DR mix for generalization to held-out mazes
+- **State representation**: Position only (not walls) — allows generalization across layouts; including walls would be Markovian but break zero-shot transfer
 - **PPO version**: All agents trained with PPO, matching the paper
