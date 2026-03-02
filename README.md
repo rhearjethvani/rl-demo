@@ -6,6 +6,42 @@ A lightweight implementation of **Protagonist Antagonist Induced Regret Environm
 
 ---
 
+## Quick Start: Minimal Demo (Recommended)
+
+The minimal demo isolates the PAIRED mechanism in a single file—no PyTorch, just NumPy:
+
+```bash
+python paired_demo.py
+```
+
+- **Q-learning** protagonist on a 7×7 GridWorld
+- **Bandit adversary** over 3 difficulty buckets (2, 4, 6 obstacles)
+- **Regret** = antagonist_return − protagonist_return
+- Prints **chosen difficulty distribution** + success rates
+
+The curriculum shifts visibly over training:
+
+| Phase | Highest-regret bucket |
+|-------|------------------------|
+| **Early** | b2 (2 obstacles) |
+| **Mid** | b4 (4 obstacles) |
+| **Late** | b6 (6 obstacles) |
+
+This matches the paper’s algorithmic idea: the adversary concentrates on the protagonist’s “zone of proximal development.”
+
+---
+
+## Full PPO Implementation
+
+A deep RL version using PyTorch + PPO is also available:
+
+```bash
+pip install -r requirements.txt
+python train.py --method all --iterations 300
+```
+
+---
+
 ## What is PAIRED?
 
 PAIRED is a method for **Unsupervised Environment Design (UED)**: instead of hand-crafting a training distribution, an adversary *learns* to generate environments that challenge the protagonist agent.
@@ -45,20 +81,34 @@ while not converged:
 
 ```
 rl-demo/
+├── paired_demo.py    # Minimal demo: Q-learning + bandit adversary (run this first)
+├── train.py          # Full PPO training (paired, DR, minimax)
 ├── env.py            # GridWorld environment (UPOMDP)
-├── models.py         # AgentNet (protagonist/antagonist) + AdversaryNet
-├── ppo.py            # PPO trainer (shared across all three agents)
+├── models.py         # AgentNet + AdversaryNet
+├── ppo.py            # PPO trainer
 ├── paired.py         # PAIRED training loop (Algorithm 1)
-├── baselines.py      # Domain Randomization + Minimax Adversarial baselines
-├── transfer_envs.py  # Hand-designed transfer environments (Empty, FourRooms, Maze, ...)
-├── evaluate.py       # Evaluation utilities (success rate, solved path length)
-├── train.py          # Main training script
-└── requirements.txt
+├── baselines.py      # Domain Randomization + Minimax baselines
+├── transfer_envs.py  # Hand-designed transfer environments
+├── evaluate.py       # Evaluation utilities
+└── requirements.txt  # For PPO version only (torch, gymnasium, etc.)
 ```
 
 ---
 
-## Environment
+## Minimal Demo Details
+
+| Component | Implementation |
+|-----------|----------------|
+| Protagonist | Q-learning |
+| Antagonist | Q-learning, pre-trained on easy envs |
+| Adversary | ε-greedy bandit with EMA over mean regret |
+| Environment | 7×7 grid, 3 difficulty buckets [2, 4, 6 obstacles] |
+
+The antagonist is pre-trained so it provides a meaningful regret signal from the start. The adversary uses EMA (α=0.25) so recent regret drives the curriculum shift.
+
+---
+
+## Full PPO Environment
 
 A **15×15 partially-observable GridWorld** (13×13 navigable interior).
 
@@ -67,11 +117,11 @@ The adversary's free parameters **θ** are:
 2. Goal position
 3. Up to 50 obstacle positions
 
-The protagonist/antagonist observe a **5×5 partial view** (3 channels: walls, goal, empty) plus their current direction. They must navigate to the green goal square.
+The protagonist/antagonist observe a **5×5 partial view** (3 channels: walls, goal, empty) plus their current direction.
 
 ---
 
-## Setup
+## Setup (PPO Version)
 
 ```bash
 pip install -r requirements.txt
@@ -79,26 +129,24 @@ pip install -r requirements.txt
 
 ---
 
-## Training
+## PPO Training
 
 ```bash
-# Train all three methods and compare (recommended)
+# Train all three methods and compare
 python train.py --method all --iterations 300
 
 # Train PAIRED only
 python train.py --method paired --iterations 500
 
-# Train domain randomization baseline
+# Baselines
 python train.py --method domain_randomization --iterations 500
-
-# Train minimax adversarial baseline
 python train.py --method minimax --iterations 500
 ```
 
 ### Key arguments
 
 | Argument | Default | Description |
-|---|---|---|
+|----------|---------|-------------|
 | `--method` | `all` | `paired`, `domain_randomization`, `minimax`, or `all` |
 | `--iterations` | `300` | Number of training iterations |
 | `--n_episodes` | `8` | Episodes per PPO update |
@@ -107,49 +155,34 @@ python train.py --method minimax --iterations 500
 
 ---
 
-## Outputs
+## PPO Outputs
 
 Results are saved to `results/`:
 
-- `results/<method>_metrics.npy` — training metrics dict
-- `results/<method>_protagonist.pt` — saved protagonist weights
-- `results/plots/training_curves.png` — solved path length + maze transfer over training
-- `results/plots/transfer_comparison.png` — final zero-shot transfer bar chart
-- `results/plots/solvable_fraction.png` — fraction of solvable environments generated
+- `results/<method>_metrics.npy` — training metrics
+- `results/<method>_protagonist.pt` — saved weights
+- `results/plots/training_curves.png` — solved path length + transfer
+- `results/plots/transfer_comparison.png` — final transfer bar chart
 
 ---
 
-## Transfer Environments
+## Transfer Environments (PPO)
 
-Zero-shot transfer is evaluated on five hand-designed environments never seen during training:
+Zero-shot transfer is evaluated on five hand-designed environments:
 
 | Environment | Description |
-|---|---|
-| **Empty** | Open grid, no obstacles |
-| **50 Blocks** | Dense random obstacles |
-| **Four Rooms** | Classic four-room layout with doorways |
-| **Maze** | Horizontal barriers requiring winding path |
-| **Labyrinth** | Concentric rectangular walls |
-
----
-
-## Expected Results
-
-After ~300–500 iterations:
-
-| Method | Empty | 50 Blocks | Four Rooms | Maze | Labyrinth |
-|---|---|---|---|---|---|
-| **PAIRED** | High | Medium | Medium | Low–Medium | Low–Medium |
-| Domain Rand. | High | Low | Low | Very Low | Very Low |
-| Minimax | High | Very Low | Very Low | ~0 | ~0 |
-
-PAIRED is the only method that generates a **curriculum of increasing complexity**, training the protagonist on progressively harder environments and achieving meaningful zero-shot transfer to maze-like structures.
+|-------------|-------------|
+| Empty | Open grid, no obstacles |
+| 50 Blocks | Dense random obstacles |
+| Four Rooms | Classic four-room layout |
+| Maze | Horizontal barriers, winding path |
+| Labyrinth | Concentric rectangular walls |
 
 ---
 
 ## Key Design Choices
 
-- **Non-negative regret**: `REGRET = max(0, REGRET)` — stabilises training by removing noise when protagonist outperforms antagonist
-- **Regret distributed across adversary steps**: each adversary placement action receives `regret / n_steps` reward
-- **Protagonist/antagonist use environment reward** (not regret) — per Appendix E.2, this is more stable
-- **All agents trained with PPO** — same optimizer, same hyperparameters, matching the paper
+- **Non-negative regret**: `REGRET = max(0, REGRET)` — stabilises training
+- **Protagonist/antagonist use environment reward** (not regret) — per paper Appendix E.2
+- **Minimal demo**: EMA on adversary bandit for responsive curriculum shift
+- **PPO version**: All agents trained with PPO, matching the paper
