@@ -11,6 +11,7 @@ A lightweight implementation of **Protagonist Antagonist Induced Regret Environm
 The minimal demo isolates the PAIRED mechanism in a single file—no PyTorch, just NumPy:
 
 ```bash
+pip install numpy   # if needed
 python paired_demo.py
 ```
 
@@ -90,7 +91,7 @@ rl-demo/
 ├── baselines.py      # Domain Randomization + Minimax baselines
 ├── transfer_envs.py  # Hand-designed transfer environments
 ├── evaluate.py       # Evaluation utilities
-└── requirements.txt  # For PPO version only (torch, gymnasium, etc.)
+└── requirements.txt  # For PPO version (torch, gymnasium, etc.); minimal demo needs only numpy
 ```
 
 ---
@@ -102,7 +103,9 @@ rl-demo/
 | Protagonist | Q-learning (state = position only; generalizes across maze layouts) |
 | Antagonist | Q-learning, pre-trained on easy envs |
 | Adversary | ε-greedy bandit with EMA over mean regret |
-| Environment | 7×7 grid, 3 difficulty buckets [2, 4, 6 obstacles] |
+| Environment | 7×7 grid, 3 difficulty buckets [2, 4, 6 obstacles], 60 steps/episode |
+| Training | 1200 iterations, 500 antagonist pre-train steps |
+| Eval | 100 held-out trials per bucket (seeds 9000–9099) |
 
 The antagonist is pre-trained so it provides a meaningful regret signal from the start. The adversary uses EMA (α=0.25) so recent regret drives the curriculum shift. A 15% domain-randomization mix (`DR_MIX`) samples a random difficulty bucket instead of the adversary’s choice to improve generalization to held-out mazes.
 
@@ -122,7 +125,7 @@ Minimax gets 0% because it only trains on the hardest bucket (b6) and never sees
 
 ## Full PPO Environment
 
-A **15×15 partially-observable GridWorld** (13×13 navigable interior).
+A **15×15 GridWorld** (13×13 navigable interior, border walls). 250 steps per episode.
 
 The adversary's free parameters **θ** are:
 1. Agent start position
@@ -173,14 +176,15 @@ Results are saved to `results/`:
 
 - `results/<method>_metrics.npy` — training metrics
 - `results/<method>_protagonist.pt` — saved weights
-- `results/plots/training_curves.png` — solved path length + transfer
-- `results/plots/transfer_comparison.png` — final transfer bar chart
+- `results/plots/training_curves.png` — solved path length + maze transfer over training
+- `results/plots/transfer_comparison.png` — final zero-shot transfer bar chart
+- `results/plots/solvable_fraction.png` — fraction of solvable envs generated over training
 
 ---
 
 ## Transfer Environments (PPO)
 
-Zero-shot transfer is evaluated on five hand-designed environments:
+Zero-shot transfer is evaluated on five hand-designed environments (10 trials each):
 
 | Environment | Description |
 |-------------|-------------|
