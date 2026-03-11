@@ -40,12 +40,14 @@ A variant where the antagonist is trained alongside the protagonist (not pre-tra
 
 ```bash
 git checkout double-agent-iteration
-python paired_demo_double_agent.py
+python paired_demo_double_agent.py [--seed 42] [--num-seeds 1] [--eval-episodes 100]
 ```
 
 - **Both** protagonist and antagonist train from scratch
-- Logs regret, protagonist return, antagonist return every iteration
-- **Plots** saved to `results/plots/paired_double_agent_curves.png`:
+- **Regret** = antagonist_return − protagonist_return (single definition in code)
+- Logs use explicit labels: `mean_regret(last 60)`, `mean_return_P`, `mean_return_A`, `top_bucket`
+- **Evaluation** (separate from training): frozen policies on fixed eval set; success rates as X/Y = Z%
+- **Plots** saved to `results/plots/paired_demo_double_agent_curves.png`:
   - Regret vs iteration
   - Protagonist vs antagonist return vs iteration
   - Mean regret (over buckets) vs iteration
