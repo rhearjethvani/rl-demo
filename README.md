@@ -32,6 +32,29 @@ This matches the paper’s algorithmic idea: the adversary concentrates on the p
 
 ---
 
+## Double-Agent Demo (Antagonist in Training Loop)
+
+**Branch:** `double-agent-iteration`
+
+A variant where the antagonist is trained alongside the protagonist (not pre-trained/fixed). Explores convergence stability when both agents learn simultaneously.
+
+```bash
+git checkout double-agent-iteration
+python paired_demo_double_agent.py
+```
+
+- **Both** protagonist and antagonist train from scratch
+- Logs regret, protagonist return, antagonist return every iteration
+- **Plots** saved to `results/plots/paired_double_agent_curves.png`:
+  - Regret vs iteration
+  - Protagonist vs antagonist return vs iteration
+  - Mean regret (over buckets) vs iteration
+  - Highest-regret bucket (curriculum) vs iteration
+
+Useful for comparing with the fixed-antagonist demo and observing whether convergence is stable when both agents co-adapt.
+
+---
+
 ## Full PPO Implementation
 
 A deep RL version using PyTorch + PPO is also available:
@@ -82,8 +105,9 @@ while not converged:
 
 ```
 rl-demo/
-├── paired_demo.py    # Minimal demo: Q-learning + bandit adversary (run this first)
-├── train.py          # Full PPO training (paired, DR, minimax)
+├── paired_demo.py              # Minimal demo: fixed antagonist
+├── paired_demo_double_agent.py # Double-agent demo: A trained alongside P (double-agent-iteration branch)
+├── train.py                    # Full PPO training (paired, DR, minimax)
 ├── env.py            # GridWorld environment (UPOMDP)
 ├── models.py         # AgentNet + AdversaryNet
 ├── ppo.py            # PPO trainer
